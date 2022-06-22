@@ -26,3 +26,7 @@ MORSE_CODE = {
     "Y": "- . - -",
     "Z": "- - . .",
 }
+
+FPS = 30
+DOT_RADIUS = 10
+DASH_DIMENSIONS = (5, 2)
