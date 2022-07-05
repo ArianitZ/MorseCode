@@ -1,9 +1,23 @@
 import sys
-from venv import create
 import pygame
 from pygame.locals import *
 from constants import MORSE_CODE, FPS, DOT_RADIUS, DASH_DIMENSIONS
-from typing import Tuple, List
+from typing import Tuple, List, NamedTuple, Iterable
+import time
+
+# TODO Add documentation to each function. Install docstring
+
+
+class Color(NamedTuple):
+    r: str
+    g: str
+    b: str
+
+
+class Point(NamedTuple):
+    x: int
+    y: int
+
 
 # TODO Make DOT_RADIUS & DASH_DIMENSIONS NamedTuples
 def initialize_pygame(
@@ -81,28 +95,29 @@ def terminate() -> None:
 
 
 def get_next_word() -> str:
-    return "SOS"
+    return "PSOS"
 
 
-# TODO find a better name for this fcn
 def calculate_sequence_positions(sequence: str, x_max) -> int:
-    # TODO Fix so that the sequence is in the center
-    n_gaps = len(sequence) + 2
+    n_gaps = len(sequence) - 1
     return x_max // n_gaps
 
 
 def draw_morse_code(display_surface: pygame.Surface, letter: str) -> None:
     sequence = MORSE_CODE[letter]
+    # Offset for one side
+    x_offset = int(display_surface.get_width() * 0.3)
 
-    gap_size = calculate_sequence_positions(sequence, display_surface.get_width())
-    y_pos = display_surface.get_height() // 2
+    gap_size = calculate_sequence_positions(sequence, display_surface.get_width() - 2 * x_offset)
+    y_pos = display_surface.get_height() // 3
     for i, char in enumerate(sequence):
-        x_pos = gap_size * (i + 2)
-        print(x_pos, y_pos)
+        x_pos = gap_size * (i) + x_offset
         if char == ".":
             pygame.draw.circle(display_surface, "black", (x_pos, y_pos), DOT_RADIUS)
         elif char == "-":
-            pygame.draw.rect(display_surface, "black", (x_pos, y_pos))
+            pygame.draw.rect(
+                display_surface, "black", (x_pos, y_pos, DASH_DIMENSIONS[0], DASH_DIMENSIONS[1])
+            )
 
 
 def use_instructions_screen(
@@ -131,23 +146,198 @@ def use_instructions_screen(
         if check_keyup_event():
             return
         pygame.display.update()
-        fps_clock.tick()
+        fps_clock.tick(FPS)
 
 
+def draw_letter(letter: str, display_surface: pygame.Surface, fontsize: int = 128) -> None:
+    x = display_surface.get_width() // 2
+    y = display_surface.get_height() // 4 * 3
+    text_surf, text_rect = create_text(letter, fontsize, (x, y))
+
+    display_surface.blit(text_surf, text_rect)
+
+
+# TODO make this function a bit better, move _draw_continuous_hue outside the fcn?
+def draw_blinking_surface(
+    display_surface: pygame.Surface,
+    fps_clock: pygame.time.Clock,
+    blinking_color: Color,
+    number_of_blinks: int,
+    animation_speed: int = 75,
+) -> None:
+    original_surface = display_surface.copy()
+
+    def _draw_continuous_hue(start: int, end: int, step: int, animation_speed: int, color) -> None:
+        for alpha in range(start, end, step * animation_speed):
+            display_surface.blit(original_surface, (0, 0))
+            flash_surface.fill((color.r, color.g, color.b, alpha)),
+            display_surface.blit(flash_surface, (0, 0))
+            pygame.display.update()
+            fps_clock.tick(FPS)
+
+    flash_surface = display_surface.convert_alpha()
+    display_surface.blit(original_surface, (0, 0))
+    for i in range(number_of_blinks):
+        for (start, end, step) in ((0, 255, 1), (255, 0, -1)):
+            _draw_continuous_hue(start, end, step, animation_speed, blinking_color)
+    display_surface.blit(original_surface, (0, 0))
+
+
+def draw_score(display_surface: pygame.Surface, score: int, position: Point, font_size=20) -> None:
+    score_msg = f"Score: {score}"
+    score_surf, score_rect = create_text(score_msg, font_size=font_size, coordinates=position)
+    display_surface.blit(score_surf, score_rect)
+
+
+def draw_guessed_letters(display_surface: pygame.Surface, letters: List[str], font_size=16) -> None:
+    display_coords = Point(display_surface.get_width(), display_surface.get_height())
+    start_pos = Point(display_coords.x // 10 * 1, display_coords.y // 10 * 8)
+    max_x_pos = display_coords.x // 10 * 9
+    gap_size = Point(0, 0)
+
+    texts_to_print = ["Guesses:"] + letters
+    for text in texts_to_print:
+        text_position = Point(start_pos.x + gap_size.x, start_pos.y)
+        if text_position.x > max_x_pos:
+            text_position.y = start_pos.y + gap_size.y
+
+        text_surf, text_rect = create_text(text, font_size, text_position)
+        display_surface.blit(text_surf, text_rect)
+
+        gap_size = Point(
+            gap_size.x + text_surf.get_width() + 5, gap_size.y + text_surf.get_height() + 5
+        )
+
+
+# TODO make a nice border around the life bars
+def draw_life_bar(display_surface: pygame.Surface, lives: int, max_lives: int = 5) -> None:
+    bar_size = Point(40, 10)
+    gap_size = 2
+    start_position = Point(
+        display_surface.get_width() // 30 * 1,
+        display_surface.get_height() // 30 * 1 + max_lives * (bar_size.y + gap_size),
+    )
+    red = Color(255, 0, 0)
+    black = Color(0, 0, 0)
+    for i in range(max_lives):
+        pygame.draw.rect(
+            display_surface,
+            black,
+            (
+                start_position.x,
+                start_position.y - i * (bar_size.y + gap_size),
+                bar_size.x,
+                bar_size.y,
+            ),
+            1,
+            2,
+        )
+    for i in range(lives):
+        pygame.draw.rect(
+            display_surface,
+            red,
+            (
+                start_position.x,
+                start_position.y - i * (bar_size.y + gap_size),
+                bar_size.x,
+                bar_size.y,
+            ),
+            0,
+            2,
+        )
+
+
+# TODO: split this function into several parts
 def use_game_screen(display_surface, fps_clock, background_color="white") -> None:
     next_word = get_next_word()
     next_letter = next_word[0]
+    score = 0
+    score_y = display_surface.get_height() // 10 * 1
+    score_x = display_surface.get_width() // 10 * 9
+    score_position = Point(score_x, score_y)
 
+    guessed_letters = list()
+    guessed_letter = ""
+
+    lives = 5
+
+    red_color = Color(255, 0, 0)
+    green_color = Color(0, 255, 0)
     while True:
         display_surface.fill(background_color)
         draw_morse_code(display_surface, next_letter)
-        if check_keyup_event():
-            return
+        draw_score(display_surface, score, score_position)
+        draw_guessed_letters(display_surface, guessed_letters)
+        draw_life_bar(display_surface, lives)
+
+        for event in pygame.event.get():
+            if (event.type == QUIT) or (event.type == KEYUP and event.key == K_ESCAPE):
+                terminate()
+            elif event.type == KEYUP and event.unicode.isalpha():
+                guessed_letter = event.unicode.upper()
+        draw_letter(guessed_letter, display_surface)
+        if guessed_letter == next_letter:
+            draw_blinking_surface(display_surface, fps_clock, green_color, 3)
+            guessed_letters = list()
+            guessed_letter = ""
+            score += 1
+            next_letter = next_word[1]
+        elif guessed_letter.isalpha():
+            draw_blinking_surface(display_surface, fps_clock, red_color, 1, animation_speed=25)
+            guessed_letters.append(guessed_letter)
+            guessed_letter = ""
+            lives -= 1
+
+        if lives <= 0:
+            use_gameover_screen(display_surface, fps_clock, score)
+            score = 0
+            lives = 5
+            guessed_letters = list()
+            next_word = get_next_word()
+            next_letter = next_word[0]
+
         pygame.display.update()
-        fps_clock.tick()
+        fps_clock.tick(FPS)
 
 
-def main():
+# TODO: implement this function which saves the score of the player
+def save_score():
+    pass
+
+
+def use_gameover_screen(
+    display_surface: pygame.Surface, fps_clock: pygame.time.Clock, score: int
+) -> None:
+    black = Color(0, 0, 0)
+    white = Color(255, 255, 255)
+
+    display_position = Point(display_surface.get_width(), display_surface.get_height())
+    gameover_surf, gameover_rect = create_text(
+        "Game Over", 60, (display_position.x // 2, display_position.y // 3), white
+    )
+    score_surf, score_rect = create_text(
+        f"Score: {score}", 30, (display_position.x // 2, display_position.y // 3 * 2), white
+    )
+
+    time.sleep(
+        0.5
+    )  # Wait for a short period since the user might have pressed key just after the last guess
+    # Empty event queue before showing game over screen
+    pygame.event.get()
+    while True:
+        for event in pygame.event.get():
+            if event.type == QUIT or (event.type == KEYUP and event.key == K_ESCAPE):
+                terminate()
+            elif event.type == KEYUP:
+                return
+        display_surface.fill(black)
+        display_surface.blit(gameover_surf, gameover_rect)
+        display_surface.blit(score_surf, score_rect)
+        pygame.display.update()
+        fps_clock.tick(FPS)
+
+
+def main() -> None:
     window_height = 600
     window_width = 960
     caption = "Morse Code"
@@ -156,6 +346,8 @@ def main():
     use_start_screen(display_surface, fps_clock)
     use_instructions_screen(display_surface, fps_clock)
     use_game_screen(display_surface, fps_clock)
+
+    return 0
 
 
 if __name__ == "__main__":
