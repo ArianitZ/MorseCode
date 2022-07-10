@@ -1,8 +1,9 @@
 import sys
 import pygame
 from pygame.locals import *
-from constants import MORSE_CODE, FPS, DOT_RADIUS, DASH_DIMENSIONS
-from typing import Tuple, List, NamedTuple, Iterable
+from constants import MAXIMUM_WORD_LENGTH, MORSE_CODE, FPS, DOT_RADIUS, DASH_DIMENSIONS
+from typing import Tuple, List, NamedTuple
+from word_handler import WordHandler
 import time
 
 # TODO Add documentation to each function. Install docstring
@@ -94,17 +95,13 @@ def terminate() -> None:
     sys.exit()
 
 
-def get_next_word() -> str:
-    return "PSOS"
-
-
 def calculate_sequence_positions(sequence: str, x_max) -> int:
     n_gaps = len(sequence) - 1
     return x_max // n_gaps
 
 
 def draw_morse_code(display_surface: pygame.Surface, letter: str) -> None:
-    sequence = MORSE_CODE[letter]
+    sequence = MORSE_CODE[letter.upper()]
     # Offset for one side
     x_offset = int(display_surface.get_width() * 0.3)
 
@@ -183,13 +180,17 @@ def draw_blinking_surface(
     display_surface.blit(original_surface, (0, 0))
 
 
-def draw_score(display_surface: pygame.Surface, score: int, position: Point, font_size=20) -> None:
+def draw_score(
+    display_surface: pygame.Surface, score: int, position: Point, font_size: int = 20
+) -> None:
     score_msg = f"Score: {score}"
     score_surf, score_rect = create_text(score_msg, font_size=font_size, coordinates=position)
     display_surface.blit(score_surf, score_rect)
 
 
-def draw_guessed_letters(display_surface: pygame.Surface, letters: List[str], font_size=16) -> None:
+def draw_guessed_letters(
+    display_surface: pygame.Surface, letters: List[str], font_size: int = 16
+) -> None:
     display_coords = Point(display_surface.get_width(), display_surface.get_height())
     start_pos = Point(display_coords.x // 10 * 1, display_coords.y // 10 * 8)
     max_x_pos = display_coords.x // 10 * 9
@@ -249,7 +250,8 @@ def draw_life_bar(display_surface: pygame.Surface, lives: int, max_lives: int = 
 
 # TODO: split this function into several parts
 def use_game_screen(display_surface, fps_clock, background_color="white") -> None:
-    next_word = get_next_word()
+    word_handler = WordHandler(max_size=MAXIMUM_WORD_LENGTH)
+    next_word = word_handler.fetch_new_word()
     next_letter = next_word[0]
     score = 0
     score_y = display_surface.get_height() // 10 * 1
@@ -289,11 +291,11 @@ def use_game_screen(display_surface, fps_clock, background_color="white") -> Non
             lives -= 1
 
         if lives <= 0:
-            use_gameover_screen(display_surface, fps_clock, score)
+            use_gameover_screen(display_surface, fps_clock, word_handler.get_current_word(), score)
             score = 0
             lives = 5
             guessed_letters = list()
-            next_word = get_next_word()
+            next_word = word_handler.fetch_new_word()
             next_letter = next_word[0]
 
         pygame.display.update()
@@ -306,17 +308,23 @@ def save_score():
 
 
 def use_gameover_screen(
-    display_surface: pygame.Surface, fps_clock: pygame.time.Clock, score: int
+    display_surface: pygame.Surface, fps_clock: pygame.time.Clock, current_word: str, score: int
 ) -> None:
     black = Color(0, 0, 0)
     white = Color(255, 255, 255)
 
     display_position = Point(display_surface.get_width(), display_surface.get_height())
     gameover_surf, gameover_rect = create_text(
-        "Game Over", 60, (display_position.x // 2, display_position.y // 3), white
+        "Game Over", 60, (display_position.x // 2, display_position.y // 4), white
+    )
+    current_word_surf, current_word_rect = create_text(
+        f"The correct word was: {current_word}",
+        30,
+        (display_position.x // 2, display_position.y // 4 * 2),
+        white,
     )
     score_surf, score_rect = create_text(
-        f"Score: {score}", 30, (display_position.x // 2, display_position.y // 3 * 2), white
+        f"Score: {score}", 30, (display_position.x // 2, display_position.y // 4 * 3), white
     )
 
     time.sleep(
@@ -332,6 +340,7 @@ def use_gameover_screen(
                 return
         display_surface.fill(black)
         display_surface.blit(gameover_surf, gameover_rect)
+        display_surface.blit(current_word_surf, current_word_rect)
         display_surface.blit(score_surf, score_rect)
         pygame.display.update()
         fps_clock.tick(FPS)

@@ -17,7 +17,6 @@ class WordHandler:
         self.max_size = max_size
         word_list = self._request_new_word_list(self.max_size)
         self._words = self._randomize_words(word_list)
-        self.word
 
     def _request_new_word_list(self, max_size: int) -> Collection[str]:
         try:
