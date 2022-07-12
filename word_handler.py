@@ -28,7 +28,7 @@ class WordHandler:
 
         return list(word for word in content if len(word) <= max_size)
 
-    def _randomize_words(self, words: Collection[str]):
+    def _randomize_words(self, words: Collection[str]) -> Collection[str]:
         return random.sample(words, len(words))
 
     def get_current_word(self):

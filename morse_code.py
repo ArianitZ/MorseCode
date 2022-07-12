@@ -95,20 +95,38 @@ def terminate() -> None:
     sys.exit()
 
 
-def calculate_sequence_positions(sequence: str, x_max) -> int:
-    n_gaps = len(sequence) - 1
-    return x_max // n_gaps
+def calculate_sequence_positions(sequence: str, interval: Tuple[int, int]) -> List[int]:
+    interval_length = interval[1] - interval[0]
+    n_sections = len(sequence)
+    section_length = interval_length // n_sections
+
+    sections = []
+    for i in range(n_sections):
+        section = (
+            interval[0] + i * section_length,
+            interval[0] + (i + 1) * section_length,
+        )
+        sections.append(section)
+
+    sequence_positions = []
+    for section in sections:
+        section_mid_point = (section[1] - section[0]) // 2
+        sequence_position = section[0] + section_mid_point
+        sequence_positions.append(sequence_position)
+
+    return sequence_positions
 
 
 def draw_morse_code(display_surface: pygame.Surface, letter: str) -> None:
     sequence = MORSE_CODE[letter.upper()]
     # Offset for one side
     x_offset = int(display_surface.get_width() * 0.3)
+    x_interval = x_offset, display_surface.get_width() - x_offset
 
-    gap_size = calculate_sequence_positions(sequence, display_surface.get_width() - 2 * x_offset)
+    x_positions = calculate_sequence_positions(sequence, x_interval)
     y_pos = display_surface.get_height() // 3
     for i, char in enumerate(sequence):
-        x_pos = gap_size * (i) + x_offset
+        x_pos = x_positions[i]
         if char == ".":
             pygame.draw.circle(display_surface, "black", (x_pos, y_pos), DOT_RADIUS)
         elif char == "-":
@@ -249,10 +267,12 @@ def draw_life_bar(display_surface: pygame.Surface, lives: int, max_lives: int = 
 
 
 # TODO: split this function into several parts
-def use_game_screen(display_surface, fps_clock, background_color="white") -> None:
+def use_game_screen(
+    display_surface: pygame.Surface, fps_clock: pygame.time.Clock, background_color: str = "white"
+) -> None:
     word_handler = WordHandler(max_size=MAXIMUM_WORD_LENGTH)
-    next_word = word_handler.fetch_new_word()
-    next_letter = next_word[0]
+    word = word_handler.fetch_new_word().upper()
+    letter_index = 0  # word[0]
     score = 0
     score_y = display_surface.get_height() // 10 * 1
     score_x = display_surface.get_width() // 10 * 9
@@ -266,8 +286,9 @@ def use_game_screen(display_surface, fps_clock, background_color="white") -> Non
     red_color = Color(255, 0, 0)
     green_color = Color(0, 255, 0)
     while True:
+        letter = word[letter_index]
         display_surface.fill(background_color)
-        draw_morse_code(display_surface, next_letter)
+        draw_morse_code(display_surface, letter)
         draw_score(display_surface, score, score_position)
         draw_guessed_letters(display_surface, guessed_letters)
         draw_life_bar(display_surface, lives)
@@ -278,12 +299,15 @@ def use_game_screen(display_surface, fps_clock, background_color="white") -> Non
             elif event.type == KEYUP and event.unicode.isalpha():
                 guessed_letter = event.unicode.upper()
         draw_letter(guessed_letter, display_surface)
-        if guessed_letter == next_letter:
+        if guessed_letter == letter:
             draw_blinking_surface(display_surface, fps_clock, green_color, 3)
             guessed_letters = list()
             guessed_letter = ""
             score += 1
-            next_letter = next_word[1]
+            letter_index += 1
+            if letter_index >= len(word):
+                word = word_handler.fetch_new_word()
+                letter_index = 0
         elif guessed_letter.isalpha():
             draw_blinking_surface(display_surface, fps_clock, red_color, 1, animation_speed=25)
             guessed_letters.append(guessed_letter)
@@ -295,8 +319,8 @@ def use_game_screen(display_surface, fps_clock, background_color="white") -> Non
             score = 0
             lives = 5
             guessed_letters = list()
-            next_word = word_handler.fetch_new_word()
-            next_letter = next_word[0]
+            word = word_handler.fetch_new_word()
+            letter_index = 0
 
         pygame.display.update()
         fps_clock.tick(FPS)
